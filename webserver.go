@@ -65,23 +65,31 @@ func UploadHandler(w http.ResponseWriter, r *http.Request) {
 	var content string
 	if file, handler, err := r.FormFile("file"); err == nil {
 		defer file.Close()
-		upload := tgbotapi.NewPhotoUpload(cast.ToInt64(viper.Get("Chat")), "/home/baron/Desktop/руслан.jpg")
-		if m, err := bot.Send(upload); err == nil {
-			fileId, maxWidth, maxHeight := "", 0, 0
-			buf := bytes.NewBufferString("        <h2>Upload complete</h2>\n<ul>\n")
-			for _, entry := range *m.Photo {
-				if entry.Width > maxWidth || entry.Height > maxHeight {
-					maxWidth = entry.Width
-					maxHeight = entry.Height
-					fileId = entry.FileID
-					fmt.Fprintf(buf, "<li><strong>%s</strong>: %d x %d</li>", entry.FileID, entry.Width, entry.Height)
+		buf := make([]byte, 10485760)
+		if in, err := file.Read(buf); err == nil {
+			log.Println("Read bytes", in)
+			content = fmt.Sprintf("<h2>Error uploading file: %s</h2>", err)
+			b := tgbotapi.FileBytes{Name: "image.jpg", Bytes: buf}
+			upload := tgbotapi.NewPhotoUpload(cast.ToInt64(viper.Get("Chat")), b)
+			if m, err := bot.Send(upload); err == nil {
+				fileId, maxWidth, maxHeight := "", 0, 0
+				buf := bytes.NewBufferString("        <h2>Upload complete</h2>\n<ul>\n")
+				for _, entry := range *m.Photo {
+					if entry.Width > maxWidth || entry.Height > maxHeight {
+						maxWidth = entry.Width
+						maxHeight = entry.Height
+						fileId = entry.FileID
+						fmt.Fprintf(buf, "<li><strong>%s</strong>: %d x %d</li>", entry.FileID, entry.Width, entry.Height)
+					}
 				}
+				fmt.Fprintf(buf, "</ul>\n<p>Best: %s</p>\n", fileId)
+				fmt.Fprintf(buf, "<p>File: %s</p>", handler.Filename)
+				content = buf.String()
+			} else {
+				content = fmt.Sprintf("<h2>Error uploading file: %s</h2>", err)
 			}
-			fmt.Fprintf(buf, "</ul>\n<p>Best: %s</p>\n", fileId)
-			fmt.Fprintf(buf, "<p>File: %s</p>", handler.Filename)
-			content = buf.String()
 		} else {
-		content = fmt.Sprintf("<h2>Error uploading file: %s</h2>", err)
+			content = fmt.Sprintf("<h2>Error reading uploaded file: %s</h2>", err)
 		}
 	} else {
 		content = fmt.Sprintf("<h2>Error uploading file: %s</h2>", err)
