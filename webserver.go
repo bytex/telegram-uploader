@@ -7,10 +7,10 @@ import (
 	"strconv"
 	"fmt"
 	"log"
-	"github.com/tucnak/telebot"
+	"github.com/go-telegram-bot-api/telegram-bot-api"
+	"github.com/spf13/cast"
+	"bytes"
 )
-
-var bot *telebot.Bot
 
 const template = `<!DOCTYPE html>
 <html lang="en">
@@ -58,21 +58,33 @@ func HomeHandler(w http.ResponseWriter, r *http.Request) {
 	fmt.Fprintf(w, template, content)
 }
 
+var bot *tgbotapi.BotAPI
+
 func UploadHandler(w http.ResponseWriter, r *http.Request) {
 	r.ParseMultipartForm(10485760)
 	var content string
 	if file, handler, err := r.FormFile("file"); err == nil {
 		defer file.Close()
-		image := telebot.File{}
-		bot.SendPhoto()
-
-		fmt.Fprintf(w, "%v", handler.Header)
-		content = `        <h2>Upload complete</h2>
-        <ul>
-        <li></li>
-        </ul>`;
+		upload := tgbotapi.NewPhotoUpload(cast.ToInt64(viper.Get("Chat")), "/home/baron/Desktop/руслан.jpg")
+		if m, err := bot.Send(upload); err == nil {
+			fileId, maxWidth, maxHeight := "", 0, 0
+			buf := bytes.NewBufferString("        <h2>Upload complete</h2>\n<ul>\n")
+			for _, entry := range *m.Photo {
+				if entry.Width > maxWidth || entry.Height > maxHeight {
+					maxWidth = entry.Width
+					maxHeight = entry.Height
+					fileId = entry.FileID
+					fmt.Fprintf(buf, "<li><strong>%s</strong>: %d x %d</li>", entry.FileID, entry.Width, entry.Height)
+				}
+			}
+			fmt.Fprintf(buf, "</ul>\n<p>Best: %s</p>\n", fileId)
+			fmt.Fprintf(buf, "<p>File: %s</p>", handler.Filename)
+			content = buf.String()
+		} else {
+		content = fmt.Sprintf("<h2>Error uploading file: %s</h2>", err)
+		}
 	} else {
-		content = fmt.Printf("<h2>Error uploading file: %s</h2>", err)
+		content = fmt.Sprintf("<h2>Error uploading file: %s</h2>", err)
 	}
 	fmt.Fprintf(w, template, content)
 }
@@ -93,7 +105,7 @@ func main() {
 
 	log.Printf("Initializing bot with %s", token)
 
-	if mybot, err := telebot.NewBot(token); err != nil {
+	if mybot, err := tgbotapi.NewBotAPI(token); err != nil {
 		log.Printf("Failed to initialize bot: %s", err)
 		return
 	} else {
